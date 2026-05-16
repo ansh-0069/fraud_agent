@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+.pytest_cache/
+# Note: trained PPO weights (ppo_coach.pt) and training_curve.json ARE
+# committed so judges can run the demo without retraining. Re-add the
+# exclusions below if model size grows.
