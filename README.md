@@ -185,8 +185,6 @@ GRABGAURD/
 │   └── models/                     # Cached weights + training curve
 ├── scripts/
 │   └── train_coach.py              # Offline PPO trainer with custom env
-├── GRAB.pdf                        # Original problem statement
-├── pdfcrowd.pdf                    # NexusWallet solution doc (canonical)
 └── README.md                       # ← you are here
 ```
 

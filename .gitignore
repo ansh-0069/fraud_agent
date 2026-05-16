@@ -8,3 +8,7 @@ out/
 __pycache__/
 .venv/
 venv/
+
+# Source PDFs (problem statement + solution doc) — kept locally for
+# reference but excluded from the repo.
+*.pdf
