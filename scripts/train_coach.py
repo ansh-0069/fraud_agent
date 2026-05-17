@@ -1,22 +1,16 @@
 """
 Offline trainer for the NexusWallet RL Coach.
 
-Implements a small, honest PPO loop directly in PyTorch over a custom
-FinancialCoachEnv (see below). Trains in ~1–2 minutes on CPU, saves
-weights to services/ml/models/ppo_coach.pt, and writes the training
-reward curve to services/ml/models/training_curve.json so the /coach Lab
-shows real curve data.
+Samples FDT state vectors from data/synthetic/users.jsonl (population training).
+Saves weights to services/ml/models/ppo_coach.pt and training_curve.json.
 
 Usage:
-    cd services/ml
-    pip install -r requirements.txt
-    cd ../../scripts
-    python train_coach.py
+    python scripts/generate_dataset.py   # if not already
+    python scripts/train_coach.py
 """
 from __future__ import annotations
 
 import json
-import os
 import random
 import sys
 from pathlib import Path
@@ -36,14 +30,41 @@ from coach import ACTION_CODES, NUM_ACTIONS, STATE_DIM, PolicyNet  # type: ignor
 MODELS = SERVICES_ML / "models"
 MODELS.mkdir(exist_ok=True)
 
+DATA_USERS = ROOT / "data" / "synthetic" / "users.jsonl"
 
-# ----------------------------------------------------------------------------
-# Tiny synthetic env — rewards "savings/income" actions when runway is low,
-# "loan/restructure" when obligation is near, "education/wellness" otherwise.
-# ----------------------------------------------------------------------------
+
+def load_population_states(path: Path) -> list[np.ndarray]:
+    """Same normalization as coach._state_vector (services/ml/coach.py)."""
+    states: list[np.ndarray] = []
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            u = json.loads(line)
+            wk = u["weeklyIncome"]
+            mean4 = float(np.mean(wk[-4:])) if len(wk) >= 4 else float(np.mean(wk))
+            obl = u["obligation"]
+            s = np.array(
+                [
+                    float(u["cashBalance"]) / 5000.0,
+                    mean4 / 2000.0,
+                    float(obl["amount"]) / 5000.0,
+                    float(obl["daysOut"]) / 60.0,
+                    float(u["emergencyRunwayDays"]) / 30.0,
+                    float(u["fdtConfidence"]),
+                    1.0,
+                    0.0,
+                ],
+                dtype=np.float32,
+            )
+            states.append(s)
+    if not states:
+        raise RuntimeError(f"No users in {path} — run scripts/generate_dataset.py")
+    return states
+
+
 class FinancialCoachEnv:
-    def __init__(self, seed: int = 0):
+    def __init__(self, states_pool: list[np.ndarray], seed: int = 0):
         self.rng = np.random.default_rng(seed)
+        self.pool = states_pool
         self.t = 0
         self.state = self.reset()
 
@@ -52,13 +73,8 @@ class FinancialCoachEnv:
         return self._random_state()
 
     def _random_state(self) -> np.ndarray:
-        cash = self.rng.uniform(0.01, 1.0)
-        wkincome = self.rng.uniform(0.1, 1.0)
-        obl_amt = self.rng.uniform(0.1, 1.0)
-        obl_days = self.rng.uniform(0.05, 1.0)
-        runway = self.rng.uniform(0.05, 1.0)
-        conf = self.rng.uniform(0.5, 1.0)
-        return np.array([cash, wkincome, obl_amt, obl_days, runway, conf, 1.0, 0.0], dtype=np.float32)
+        idx = int(self.rng.integers(0, len(self.pool)))
+        return self.pool[idx].copy()
 
     def step(self, action_idx: int) -> Tuple[np.ndarray, float, bool]:
         s = self.state
@@ -66,7 +82,6 @@ class FinancialCoachEnv:
         runway = s[4]
         obl_days = s[3]
         cash = s[0]
-        # reward shape
         reward = 0.0
         if runway < 0.3:
             if code.startswith("SAVINGS_") or code.startswith("INCOME_"):
@@ -82,27 +97,25 @@ class FinancialCoachEnv:
             reward += 0.3
         if code.startswith("WELLNESS_") and runway > 0.5:
             reward += 0.2
-        reward += self.rng.normal(0, 0.05)
+        reward += float(self.rng.normal(0, 0.05))
         self.t += 1
         done = self.t >= 8
         self.state = self._random_state()
         return self.state, float(reward), done
 
 
-# ----------------------------------------------------------------------------
-# Minimal PPO
-# ----------------------------------------------------------------------------
 def train(epochs: int = 50, batch_size: int = 256, lr: float = 3e-3) -> None:
+    pool = load_population_states(DATA_USERS)
     net = PolicyNet()
     opt = optim.Adam(net.parameters(), lr=lr)
 
-    env = FinancialCoachEnv(seed=0)
+    env = FinancialCoachEnv(states_pool=pool, seed=0)
     curve = []
     gamma = 0.97
     clip = 0.2
 
     for ep in range(epochs):
-        states, actions, log_probs_old, returns, advs = [], [], [], [], []
+        states, actions, log_probs_old, returns = [], [], [], []
         ep_rewards = []
         for _ in range(batch_size // 8):
             s = env.reset()
@@ -121,7 +134,6 @@ def train(epochs: int = 50, batch_size: int = 256, lr: float = 3e-3) -> None:
                 traj_logp.append(logp)
                 traj_r.append(r)
                 s = ns
-            # GAE-lite returns
             R = 0.0
             traj_returns = []
             for r in reversed(traj_r):
@@ -137,10 +149,8 @@ def train(epochs: int = 50, batch_size: int = 256, lr: float = 3e-3) -> None:
         A = torch.tensor(actions, dtype=torch.long)
         LP = torch.tensor(log_probs_old, dtype=torch.float32)
         R = torch.tensor(returns, dtype=torch.float32)
-        # Standardize returns
         R_n = (R - R.mean()) / (R.std() + 1e-6)
 
-        # PPO update
         for _ in range(4):
             logits, value = net(S)
             probs = torch.softmax(logits, dim=-1)

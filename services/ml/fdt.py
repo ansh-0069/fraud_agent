@@ -75,15 +75,29 @@ class FDTEngine:
         self.models_dir = models_dir
         self._cache: Dict[str, IncomeLSTM] = {}
         self._cache_mean: Dict[str, float] = {}
+        self._global_lstm: IncomeLSTM | None = None
+        global_path = models_dir / "fdt_lstm.pt"
+        if global_path.exists():
+            try:
+                m = IncomeLSTM(hidden_size=32)
+                m.load_state_dict(torch.load(global_path, map_location="cpu"))
+                m.eval()
+                self._global_lstm = m
+            except Exception:
+                self._global_lstm = None
 
     def info(self) -> Dict[str, Any]:
         return {
             "lstm_hidden": 32,
             "cached_personas": len(self._cache),
+            "global_pretrained_lstm": bool(self._global_lstm is not None),
             "torch": torch.__version__,
         }
 
     def _get_lstm(self, key: str, history: List[float]) -> IncomeLSTM:
+        if self._global_lstm is not None:
+            self._cache_mean[key] = float(np.mean(history)) or 1.0
+            return self._global_lstm
         if key not in self._cache:
             self._cache[key] = _train_lstm(history)
             self._cache_mean[key] = float(np.mean(history)) or 1.0

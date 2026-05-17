@@ -4,12 +4,15 @@ import { Activity, Cpu, Wifi, Sparkles } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { PersonaSwitcher } from "@/components/nav/persona-switcher";
+import { DemoMode } from "@/components/nav/demo-mode";
 
 export function TopBar() {
-  const persona = useAppStore((s) => s.getPersona());
+  const isAll = useAppStore((s) => s.isAllDrivers());
+  const persona = useAppStore((s) => s.getActivePersona());
   const llm = useAppStore((s) => s.lastLLMLatency);
   const fdt = useAppStore((s) => s.lastFDTRuntime);
+  const demoRunning = useAppStore((s) => s.demoRunning);
   const [mlOk, setMlOk] = useState<"checking" | "up" | "down">("checking");
 
   useEffect(() => {
@@ -43,35 +46,53 @@ export function TopBar() {
 
         <div className="flex-1 hidden lg:flex items-center gap-3 text-xs text-muted-foreground">
           <Badge variant="secondary">
-            <span className="h-1.5 w-1.5 rounded-full bg-grab-500 animate-pulse" />
-            DEMO MODE · MOCK DATA
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                demoRunning ? "bg-rose-400" : "bg-grab-500"
+              } animate-pulse`}
+            />
+            {demoRunning ? "AUTO-DEMO RUNNING" : "DEMO MODE · MOCK DATA"}
           </Badge>
-          <span className="opacity-60">
-            Acting as <span className="text-foreground/90">{persona.name}</span> · {persona.segmentLabel}
-          </span>
+          {/* Context label — what the rest of the UI is currently showing. */}
+          {isAll ? (
+            <span className="opacity-60">
+              Showing{" "}
+              <span className="text-foreground/90">all {`{4}`} drivers</span> ·
+              fleet aggregate
+            </span>
+          ) : (
+            <span className="opacity-60">
+              Showing{" "}
+              <span className="text-foreground/90">{persona.name}</span> ·{" "}
+              {persona.segmentLabel}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
+          {/* The global persona filter — sits to the left of everything else
+              so it reads as the primary control, not an afterthought. */}
+          <PersonaSwitcher />
+
           <Badge
             variant={
               mlOk === "up" ? "default" : mlOk === "down" ? "destructive" : "secondary"
             }
-            className="num-mono"
+            className="num-mono hidden md:inline-flex"
           >
             <Wifi className="h-3 w-3" />
             {mlOk === "up" ? "ML SIDECAR · UP" : mlOk === "down" ? "SIDECAR · OFFLINE" : "checking…"}
           </Badge>
-          <Badge variant="info" className="num-mono">
+          <Badge variant="info" className="num-mono hidden md:inline-flex">
             <Cpu className="h-3 w-3" />
             FDT {fdt > 0 ? `${fdt}ms` : "—"}
           </Badge>
-          <Badge variant="info" className="num-mono">
+          <Badge variant="info" className="num-mono hidden md:inline-flex">
             <Activity className="h-3 w-3" />
             LLM {llm > 0 ? `${llm}ms` : "—"}
           </Badge>
-          <Button asChild variant="glass" size="sm">
-            <Link href="/reasoning-log">Demo Path →</Link>
-          </Button>
+
+          <DemoMode />
         </div>
       </div>
     </header>

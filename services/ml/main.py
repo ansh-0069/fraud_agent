@@ -32,6 +32,7 @@ from guardian import GuardianEngine
 from coach import CoachEngine
 
 ROOT = Path(__file__).parent
+REPO_ROOT = ROOT.parent.parent
 MODELS_DIR = ROOT / "models"
 MODELS_DIR.mkdir(exist_ok=True)
 
@@ -165,6 +166,14 @@ def coach_recommend(req: CoachRequest):
     out["runtimeMs"] = int((time.time() - started) * 1000)
     out["source"] = "python"
     return out
+
+
+@app.get("/population/summary")
+def population_summary():
+    p = REPO_ROOT / "apps" / "web" / "public" / "data" / "population_summary.json"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="population_summary.json not found - run scripts/train_all.py")
+    return json.loads(p.read_text(encoding="utf-8"))
 
 
 @app.post("/guardian/score")

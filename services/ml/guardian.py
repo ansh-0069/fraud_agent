@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
+import joblib
 from sklearn.ensemble import IsolationForest
 
 try:
@@ -82,6 +83,22 @@ def _plain_language(feat: str, value: float, raw: Dict[str, Any]) -> str:
 
 class GuardianEngine:
     def __init__(self, models_dir: Path):
+        bundle_path = models_dir / "guardian_iforest.joblib"
+        if bundle_path.exists():
+            try:
+                bundle = joblib.load(bundle_path)
+                self.model = bundle["model"]
+                self.background = np.asarray(bundle["background"], dtype=np.float32)
+                self.baseline_size = int(bundle.get("n_fit", len(bundle.get("background", []))))
+                self.explainer = None
+                if shap is not None:
+                    try:
+                        self.explainer = shap.Explainer(self.model, self.background)
+                    except Exception:
+                        self.explainer = None
+                return
+            except Exception:
+                pass
         rng = np.random.default_rng(13)
         X = _gen_baseline(4000, rng)
         self.model = IsolationForest(
@@ -95,7 +112,6 @@ class GuardianEngine:
         self.explainer = None
         if shap is not None:
             try:
-                # TreeExplainer works on IsolationForest's base estimators directly
                 self.explainer = shap.Explainer(self.model, self.background)
             except Exception:
                 self.explainer = None
@@ -103,7 +119,7 @@ class GuardianEngine:
 
     def info(self) -> Dict[str, Any]:
         return {
-            "method": "IsolationForest(n=120)",
+            "method": f"IsolationForest(n_estimators={getattr(self.model, 'n_estimators', '?')})",
             "baseline_rows": int(self.baseline_size),
             "shap": bool(self.explainer is not None),
         }

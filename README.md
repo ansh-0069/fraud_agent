@@ -7,7 +7,7 @@ NexusWallet is an enterprise-grade, multi-agent GenAI platform that serves the
 **40% of Southeast Asia's workforce that traditional banking still ignores** —
 gig workers, creators, freelancers, independent contractors, and seasonal workers.
 
-The prototype is a **12-screen demo** that visually walks judges through every
+The prototype is a **13-screen demo** that visually walks judges through every
 layer of the solution, backed by **real ML** (PyTorch LSTM + Monte Carlo, sklearn
 Isolation Forest, custom PPO policy, real SHAP attribution) — nothing is faked.
 
@@ -46,7 +46,7 @@ mirrored in [`services/ml/coach.py`](services/ml/coach.py) (Python). The
 policy network can only recommend actions from this set — it cannot invent
 new actions (hard guardrail).
 
-## The 12 Demo Screens
+## The 13 Demo Screens
 
 | # | Path | What judges see |
 |---|---|---|
@@ -60,8 +60,9 @@ new actions (hard guardrail).
 | 8 | `/reasoning-log` | **The demo killer** — Ahmad's 8-step reasoning trace from §07 of the solution doc plays cinematically with typing animation, evolving artifact panel, and final audit-log commit |
 | 9 | `/architecture` | Interactive React Flow diagram of the entire NexusWallet topology. Click any node to inspect its stack and the explicit reason for each tech choice |
 | 10 | `/segments` | Four-segment comparison. Each persona's income pattern, pain point, and tailored top-3 actions side-by-side |
-| 11 | `/impact` | Animated business-impact counters (default rate ↓30%, LTV ↑50%, fraud ↓45%), 3-year revenue model bars, SEA TAM bubble map, GXS strategic-alignment checklist |
-| 12 | `/audit` | Hash-chained `audit_log` table with MAS FEAT (Fairness, Ethics, Accountability, Transparency) badges and verify-hash buttons |
+| 11 | `/population` | **Population ML** — histograms, UMAP cohort scatter (four personas as stars), confusion matrix vs KMeans, LSTM + PPO curves, default-risk ROC/calibration, Guardian PR. Requires one offline training run (below). |
+| 12 | `/impact` | Animated business-impact counters (default rate ↓30%, LTV ↑50%, fraud ↓45%), 3-year revenue model bars, SEA TAM bubble map, GXS strategic-alignment checklist |
+| 13 | `/audit` | Hash-chained `audit_log` table with MAS FEAT (Fairness, Ethics, Accountability, Transparency) badges and verify-hash buttons |
 
 Press `→` / `←` on any screen to advance / retreat through the rehearsed demo path. `Esc` returns to the landing page.
 
@@ -78,10 +79,18 @@ cd services\ml
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 
-# 3. (Optional) Train the PPO coach offline
-#    Saves models/ppo_coach.pt + models/training_curve.json
+# 3. (Recommended once) Full population ML pipeline — 10k synthetic users,
+#    global FDT LSTM, cohorts + UMAP, segment MLP, default risk, Guardian IF,
+#    PPO on population states. Writes models under services/ml/models/ and
+#    apps/web/public/data/population_summary.json for /population.
 cd ..\..
-python scripts/train_coach.py
+pip install -r services\ml\requirements.txt
+# Optional: smaller / faster Guardian fit on laptop (default 1,000,000 rows).
+#   PowerShell:  $env:GUARDIAN_N="200000"
+python scripts\train_all.py
+
+# 4. (Optional) Train only the PPO coach (skipped if you ran train_all.py)
+python scripts\train_coach.py
 ```
 
 The Python sidecar is **optional**. If it isn't running, the Next.js app
@@ -106,7 +115,7 @@ breaks and the responses are never wrong.
 | LLM | Groq · LLaMA 3.3 70B (real, optional API) | Sub-100ms latency required for live conversation |
 | FDT | PyTorch LSTM (32 hidden) → vectorized NumPy Monte Carlo | Twin enables "what-if" without hallucination |
 | RL Coach | Custom PyTorch PPO over discrete 72-action space | PPO handles delayed-reward financial advice better than DQN |
-| Fraud | `sklearn.IsolationForest(n=120)` + real SHAP attribution | Works on unlabelled fraud data; SHAP makes alerts trustable |
+| Fraud | `sklearn.IsolationForest` (offline train on 1M synthetic tx) + real SHAP attribution | Works on unlabelled fraud data; SHAP makes alerts trustable |
 | Cache & state (mocked) | Redis-style JSON state graph in-memory; SQLite-style audit log | Easy to swap to real Redis + PostgreSQL in production |
 
 ## Reasoning Log (sample output)
@@ -174,17 +183,27 @@ STEP 8 · Audit Trail Written
 ```
 GRABGAURD/
 ├── apps/web/                      # Next.js 14 frontend
-│   ├── app/                        # 12 demo pages + 4 API routes
-│   ├── components/                 # UI primitives + feature widgets
+│   ├── app/                        # 13 demo pages + API routes (incl. /api/population)
+│   ├── components/                 # UI primitives + feature widgets + charts
 │   └── lib/                        # Personas, MACE state, LLM, TS-fallback ML
+├── data/synthetic/                # Synthetic 10k dataset (from scripts/generate_dataset.py)
 ├── services/ml/                   # FastAPI Python sidecar
-│   ├── main.py                     # FastAPI app
+│   ├── main.py                     # FastAPI app (+ GET /population/summary)
 │   ├── fdt.py                      # PyTorch LSTM + Monte Carlo FDT
 │   ├── guardian.py                 # sklearn Isolation Forest + SHAP
 │   ├── coach.py                    # PyTorch PPO policy, 72-action head
-│   └── models/                     # Cached weights + training curve
+│   └── models/                     # Cached weights + training curves
 ├── scripts/
-│   └── train_coach.py              # Offline PPO trainer with custom env
+│   ├── generate_dataset.py
+│   ├── train_fdt.py
+│   ├── discover_cohorts.py
+│   ├── train_segment_classifier.py
+│   ├── simulate_outcomes.py
+│   ├── train_default_risk.py
+│   ├── train_coach.py
+│   ├── train_guardian.py
+│   ├── build_population_summary.py
+│   └── train_all.py                # Orchestrates the full pipeline
 └── README.md                       # ← you are here
 ```
 
@@ -198,7 +217,8 @@ GRABGAURD/
 6. **`/coach`** (25s) — show 72-action heatmap + SHAP for chosen action.
 7. **`/guardian`** (25s) — click "Inject fraud event" → pre-hoc detection + plain-language explanation.
 8. **`/reasoning-log`** (70s) — hit Play → 8-step cinematic trace.
-9. **`/architecture` → `/impact` → `/audit`** (45s) — closing flex.
+9. **`/architecture` → `/population`** (30s) — cohort science: UMAP, training curves, default risk, Guardian PR.
+10. **`/impact` → `/audit`** (45s) — closing flex.
 
 **Total: ~5 minutes.**
 

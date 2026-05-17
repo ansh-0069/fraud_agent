@@ -9,6 +9,7 @@
     "dev:ml": "echo 'Run in services/ml:  uvicorn main:app --reload --port 8000'",
     "build": "npm run build --workspace nexuswallet-web",
     "start": "npm run start --workspace nexuswallet-web",
-    "train:coach": "echo 'Run from project root:  python scripts/train_coach.py'"
+    "train:coach": "echo 'Run from project root:  python scripts/train_coach.py'",
+    "train:all": "echo 'Run from project root:  python scripts/train_all.py'"
   }
 }

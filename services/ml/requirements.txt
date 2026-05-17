@@ -6,3 +6,5 @@ scikit-learn==1.5.2
 torch==2.5.1
 shap==0.46.0
 joblib==1.4.2
+pandas==2.2.3
+umap-learn==0.5.6

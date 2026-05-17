@@ -11,6 +11,7 @@ import {
   ScrollText,
   Network,
   Users,
+  BarChart3,
   TrendingUp,
   FileLock2,
   CircleUser,
@@ -29,13 +30,15 @@ const NAV = [
   { href: "/reasoning-log", label: "Reasoning Log", icon: ScrollText, group: "Story" },
   { href: "/architecture", label: "Architecture", icon: Network, group: "Story" },
   { href: "/segments", label: "Segments", icon: Users, group: "Story" },
+  { href: "/population", label: "Population ML", icon: BarChart3, group: "Story" },
   { href: "/impact", label: "Business Impact", icon: TrendingUp, group: "Story" },
   { href: "/audit", label: "Audit Trail", icon: FileLock2, group: "Story" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const persona = useAppStore((s) => s.getPersona());
+  const persona = useAppStore((s) => s.getActivePersona());
+  const isAll = useAppStore((s) => s.isAllDrivers());
   const groups = Array.from(new Set(NAV.map((n) => n.group)));
 
   return (
@@ -97,12 +100,14 @@ export function Sidebar() {
           className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] transition-colors p-2.5"
         >
           <div className="relative h-9 w-9 rounded-lg bg-gradient-to-br from-grab-500/30 to-cyan-500/30 grid place-items-center text-lg">
-            {persona.segmentEmoji}
+            {isAll ? "🌐" : persona.segmentEmoji}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium truncate">{persona.name}</div>
+            <div className="text-xs font-medium truncate">
+              {isAll ? "All Drivers" : persona.name}
+            </div>
             <div className="text-[10px] text-muted-foreground truncate">
-              {persona.segmentLabel} · {persona.city}
+              {isAll ? "Fleet view · 4 personas" : `${persona.segmentLabel} · ${persona.city}`}
             </div>
           </div>
           <span className="h-2 w-2 rounded-full bg-grab-500 shadow-[0_0_8px_rgba(0,177,79,0.7)] animate-pulse" />

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { PageShell } from "@/components/ui/page-shell";
 import { KPICard } from "@/components/dashboard/kpi-card";
 import { AgentFeed } from "@/components/dashboard/agent-feed";
+import { FleetView } from "@/components/dashboard/fleet-view";
 import { MonteCarloFan } from "@/components/fdt/monte-carlo-fan";
 import { seedAgentActivity } from "@/lib/mockdata";
 import { formatCurrency } from "@/lib/utils";
@@ -23,12 +24,22 @@ import type { MCResult } from "@/lib/ml/monte-carlo";
 import { motion } from "framer-motion";
 
 export default function DashboardPage() {
-  const persona = useAppStore((s) => s.getPersona());
+  const persona = useAppStore((s) => s.getActivePersona());
+  const isAll = useAppStore((s) => s.isAllDrivers());
   const setTel = useAppStore((s) => s.setTelemetry);
   const [mc, setMc] = useState<MCResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // In fleet (All Drivers) view we don't need a single-persona Monte
+    // Carlo — the <FleetView /> below has its own visualisations. Skip
+    // the API call entirely so navigating in/out of the fleet view feels
+    // instant.
+    if (isAll) {
+      setMc(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     fetch("/api/fdt", {
       method: "POST",
@@ -44,20 +55,33 @@ export default function DashboardPage() {
         setTel("fdt", j.runtimeMs);
       })
       .finally(() => setLoading(false));
-  }, [persona.id, setTel]);
+  }, [persona.id, setTel, isAll]);
 
   return (
     <PageShell
       step="STEP 2 · LIVE COMMAND CENTER"
       title={
-        <span>
-          {persona.name}'s digital twin{" "}
-          <span className="text-muted-foreground font-normal text-xl">
-            · {persona.segmentLabel} · {persona.city}
+        isAll ? (
+          <span>
+            Fleet command center{" "}
+            <span className="text-muted-foreground font-normal text-xl">
+              · all drivers · 4 segments
+            </span>
           </span>
-        </span>
+        ) : (
+          <span>
+            {persona.name}'s digital twin{" "}
+            <span className="text-muted-foreground font-normal text-xl">
+              · {persona.segmentLabel} · {persona.city}
+            </span>
+          </span>
+        )
       }
-      description="Live financial state, Monte Carlo projection, and the agent system's heartbeat — all wired to the same FDT snapshot the LangGraph state machine uses."
+      description={
+        isAll
+          ? "Aggregate liquidity, runway, and risk across the full driver fleet. Click any driver to drill into their individual digital twin — or use the persona dropdown above."
+          : "Live financial state, Monte Carlo projection, and the agent system's heartbeat — all wired to the same FDT snapshot the LangGraph state machine uses."
+      }
       rightSlot={
         <Button asChild variant="default">
           <Link href="/fdt-lab">
@@ -66,6 +90,9 @@ export default function DashboardPage() {
         </Button>
       }
     >
+      {isAll && <FleetView />}
+      {!isAll && (
+        <>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         <KPICard
           label="Cash balance"
@@ -267,6 +294,8 @@ export default function DashboardPage() {
           </Button>
         </motion.div>
       </div>
+        </>
+      )}
     </PageShell>
   );
 }

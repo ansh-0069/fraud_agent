@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAppStore } from "@/lib/store";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, Sparkles, Bot, User, Activity, Brain } from "lucide-react";
 import { AgentGraph } from "@/components/mace/agent-graph";
@@ -22,6 +22,8 @@ interface ChatMessage {
 export default function MACEPage() {
   const persona = useAppStore((s) => s.getPersona());
   const setTel = useAppStore((s) => s.setTelemetry);
+  const demoQuery = useAppStore((s) => s.demoQuery);
+  const consumeDemoQuery = useAppStore((s) => s.consumeDemoQuery);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
@@ -100,6 +102,19 @@ export default function MACEPage() {
       setRunning(false);
     }
   }
+
+  // Auto-fire scripted queries pushed by the global Demo Mode runner. The
+  // store value is "consumed" (cleared) on read so the same query never
+  // re-fires on hot-reload or re-mount.
+  useEffect(() => {
+    if (!demoQuery || running) return;
+    const q = consumeDemoQuery();
+    if (q) send(q);
+    // `send` and `persona` are intentionally omitted — we only want this to
+    // react to a fresh demoQuery being pushed into the store, not to
+    // re-fire on persona swap or unrelated re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoQuery]);
 
   return (
     <PageShell
@@ -252,6 +267,10 @@ export default function MACEPage() {
 
         <div className="space-y-4">
           <div className="surface p-4">
+            <ReasoningPane lines={logLines} />
+          </div>
+
+          <div className="surface p-4">
             <div className="text-xs font-medium mb-2 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-grab-500 animate-pulse" />
               Agent routing graph
@@ -261,10 +280,6 @@ export default function MACEPage() {
               Pulse = currently active node · dashed edges = live data flow.
               Mirrors the LangGraph state machine in <code>lib/mace/graph.ts</code>.
             </div>
-          </div>
-
-          <div className="surface p-4">
-            <ReasoningPane lines={logLines} />
           </div>
         </div>
       </div>
